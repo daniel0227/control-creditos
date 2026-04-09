@@ -14,6 +14,11 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0',
     port: parseInt(process.env.PORT) || 4173,
-    allowedHosts: 'all',
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      '*.railway.app',
+      'control-creditos-production.up.railway.app'
+    ],
   },
 })
