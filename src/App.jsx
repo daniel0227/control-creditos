@@ -1,4 +1,12 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
+import {
+  archiveCredit,
+  createCredit,
+  fetchDashboard,
+  restoreCredit as restoreCreditRequest,
+  updateCredit as updateCreditRequest,
+  upsertPayment,
+} from "./api";
 
 const MONTHS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const TYPES = ["Hipotecario","Libre Inversi\u00f3n","Veh\u00edculo","Tarjeta de Cr\u00e9dito","Educativo","Personal","Comercial","Otro"];
@@ -21,44 +29,13 @@ function fD(d) {
   if (!d) return "\u2014";
   return new Date(d + "T12:00:00").toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
 }
+function fDT(d) {
+  if (!d) return "\u2014";
+  return new Date(d).toLocaleString("es-CO", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 function cv(c) {
   return c.originalValue - c.payments.reduce(function (s, p) { return s + (p.abono || 0); }, 0);
 }
-
-var _nid = 6;
-
-var INIT_DATA = [
-  { id: 1, entity: "Bancolombia", type: "Hipotecario", responsible: "Juan P\u00e9rez", originalValue: 150000000, rate: 12.5, term: 180, payments: [
-    { month: 0, status: "P", date: "2026-01-05", interest: 1562500, abono: 0, note: "" },
-    { month: 1, status: "P", date: "2026-02-04", interest: 1562500, abono: 0, note: "" },
-    { month: 2, status: "P", date: "2026-03-05", interest: 1562500, abono: 5000000, note: "Abono extra de prima" },
-    { month: 3, status: "P", date: "2026-04-03", interest: 1510417, abono: 0, note: "" },
-  ] },
-  { id: 2, entity: "Davivienda", type: "Libre Inversi\u00f3n", responsible: "Mar\u00eda L\u00f3pez", originalValue: 30000000, rate: 18.9, term: 60, payments: [
-    { month: 0, status: "P", date: "2026-01-10", interest: 472500, abono: 0, note: "" },
-    { month: 1, status: "P", date: "2026-02-10", interest: 472500, abono: 2000000, note: "Abono parcial" },
-    { month: 2, status: "P", date: "2026-03-11", interest: 441000, abono: 0, note: "" },
-    { month: 3, status: "N", date: null, interest: 441000, abono: 0, note: "Pendiente" },
-  ] },
-  { id: 3, entity: "BBVA", type: "Veh\u00edculo", responsible: "Juan P\u00e9rez", originalValue: 45000000, rate: 15.5, term: 72, payments: [
-    { month: 0, status: "P", date: "2026-01-08", interest: 581250, abono: 0, note: "" },
-    { month: 1, status: "P", date: "2026-02-09", interest: 581250, abono: 0, note: "" },
-    { month: 2, status: "PP", date: "2026-03-15", interest: 290625, abono: 0, note: "Pago parcial" },
-    { month: 3, status: "P", date: "2026-04-07", interest: 581250, abono: 3000000, note: "Abono + intereses" },
-  ] },
-  { id: 4, entity: "Banco de Bogot\u00e1", type: "Tarjeta de Cr\u00e9dito", responsible: "Mar\u00eda L\u00f3pez", originalValue: 8000000, rate: 28.0, term: 36, payments: [
-    { month: 0, status: "P", date: "2026-01-15", interest: 186667, abono: 0, note: "" },
-    { month: 1, status: "P", date: "2026-02-14", interest: 186667, abono: 1000000, note: "Abono voluntario" },
-    { month: 2, status: "P", date: "2026-03-15", interest: 163333, abono: 0, note: "" },
-    { month: 3, status: "P", date: "2026-04-05", interest: 163333, abono: 0, note: "" },
-  ] },
-  { id: 5, entity: "Colpatria", type: "Educativo", responsible: "Carlos Garc\u00eda", originalValue: 25000000, rate: 11.0, term: 120, payments: [
-    { month: 0, status: "P", date: "2026-01-20", interest: 229167, abono: 0, note: "" },
-    { month: 1, status: "N", date: null, interest: 229167, abono: 0, note: "No se pag\u00f3" },
-    { month: 2, status: "P", date: "2026-03-22", interest: 458333, abono: 0, note: "Se pag\u00f3 doble" },
-    { month: 3, status: "P", date: "2026-04-06", interest: 229167, abono: 0, note: "" },
-  ] },
-];
 
 var baseInput = {
   width: "100%", padding: "10px 12px", borderRadius: 8,
@@ -254,7 +231,7 @@ function ArchiveModal(props) {
               <div style={{ padding: "8px 12px", background: "#7f1d1d15", borderRadius: 8, border: "1px solid #ef444418" }}>
                 <div style={{ fontSize: 8, color: "#ef4444", textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }}>Motivo</div>
                 <div style={{ fontSize: 11, color: "#fca5a5", fontStyle: "italic" }}>"{item.reason}"</div>
-                <div style={{ fontSize: 9, color: "#475569", marginTop: 4 }}>{item.date}</div>
+                <div style={{ fontSize: 9, color: "#475569", marginTop: 4 }}>{fDT(item.archivedAt)}</div>
               </div>
             </div>
           );
@@ -299,7 +276,7 @@ function CreditFormModal(props) {
     if (isEdit) {
       onSave(Object.assign({}, credit, { entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), term: Number(form.term) }));
     } else {
-      onSave({ id: _nid++, entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), term: Number(form.term), payments: [] });
+      onSave({ entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), term: Number(form.term), payments: [] });
     }
     onClose();
   }
@@ -554,7 +531,7 @@ function DetailModal(props) {
 }
 
 export default function App() {
-  var cs = useState(INIT_DATA);
+  var cs = useState([]);
   var credits = cs[0];
   var setCredits = cs[1];
   var dis = useState(null);
@@ -572,40 +549,94 @@ export default function App() {
   var sas = useState(false);
   var showArchive = sas[0];
   var setShowArchive = sas[1];
+  var ls = useState(true);
+  var isLoading = ls[0];
+  var setLoading = ls[1];
+  var ers = useState("");
+  var syncError = ers[0];
+  var setSyncError = ers[1];
 
-  var addPayment = useCallback(function (cid, pay) {
-    setCredits(function (prev) {
-      return prev.map(function (c) {
-        if (c.id !== cid) return c;
-        var idx = c.payments.findIndex(function (p) { return p.month === pay.month; });
-        var np;
-        if (idx >= 0) { np = [].concat(c.payments); np[idx] = pay; }
-        else { np = [].concat(c.payments, [pay]).sort(function (a, b) { return a.month - b.month; }); }
-        return Object.assign({}, c, { payments: np });
+  useEffect(function () {
+    setLoading(true);
+    setSyncError("");
+
+    fetchDashboard()
+      .then(function (data) {
+        setCredits(data.credits || []);
+        setArchived(data.archived || []);
+      })
+      .catch(function (error) {
+        setSyncError(error.message || "No se pudo cargar la informacion guardada.");
+      })
+      .finally(function () {
+        setLoading(false);
       });
-    });
-  }, []);
+  }, [setArchived, setCredits, setLoading, setSyncError]);
+
+  function addPayment(cid, pay) {
+    setSyncError("");
+    return upsertPayment(cid, pay)
+      .then(function (updated) {
+        setCredits(function (prev) {
+          return prev.map(function (c) {
+            return c.id === updated.id ? updated : c;
+          });
+        });
+      })
+      .catch(function (error) {
+        setSyncError(error.message || "No se pudo registrar el pago.");
+      });
+  }
 
   function saveCredit(data) {
-    setCredits(function (prev) {
-      var exists = prev.find(function (c) { return c.id === data.id; });
-      if (exists) return prev.map(function (c) { return c.id === data.id ? Object.assign({}, c, { entity: data.entity, type: data.type, responsible: data.responsible, originalValue: data.originalValue, rate: data.rate, term: data.term }) : c; });
-      return [].concat(prev, [data]);
-    });
+    setSyncError("");
+    var request = data.id ? updateCreditRequest(data.id, data) : createCredit(data);
+
+    return request
+      .then(function (saved) {
+        setCredits(function (prev) {
+          var exists = prev.some(function (c) { return c.id === saved.id; });
+          var next = exists
+            ? prev.map(function (c) { return c.id === saved.id ? saved : c; })
+            : [].concat(prev, [saved]);
+
+          return next.sort(function (a, b) { return a.id - b.id; });
+        });
+      })
+      .catch(function (error) {
+        setSyncError(error.message || "No se pudo guardar el credito.");
+      });
   }
 
   function deleteCredit(id, reason) {
-    var c = credits.find(function (x) { return x.id === id; });
-    if (!c) return;
-    setArchived(function (prev) {
-      return [].concat(prev, [{ credit: c, reason: reason, date: new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) }]);
-    });
-    setCredits(function (prev) { return prev.filter(function (x) { return x.id !== id; }); });
+    setSyncError("");
+    return archiveCredit(id, reason)
+      .then(function (archivedCredit) {
+        setArchived(function (prev) {
+          return [archivedCredit].concat(prev);
+        });
+        setCredits(function (prev) { return prev.filter(function (x) { return x.id !== id; }); });
+        setDetailId(function (prev) { return prev === id ? null : prev; });
+      })
+      .catch(function (error) {
+        setSyncError(error.message || "No se pudo archivar el credito.");
+      });
   }
 
   function restoreCredit(item) {
-    setCredits(function (prev) { return [].concat(prev, [item.credit]); });
-    setArchived(function (prev) { return prev.filter(function (x) { return x !== item; }); });
+    setSyncError("");
+    return restoreCreditRequest(item.credit.id)
+      .then(function (restored) {
+        setCredits(function (prev) {
+          return [].concat(prev, [restored]).sort(function (a, b) { return a.id - b.id; });
+        });
+        setArchived(function (prev) {
+          return prev.filter(function (x) { return x.credit.id !== item.credit.id; });
+        });
+      })
+      .catch(function (error) {
+        setSyncError(error.message || "No se pudo restaurar el credito.");
+      });
   }
 
   var enriched = credits.map(function (c) { return Object.assign({}, c, { currentValue: cv(c) }); });
@@ -638,7 +669,7 @@ export default function App() {
         <div style={{ width: 42, height: 42, borderRadius: 12, background: "linear-gradient(135deg, #3b82f6, #6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>&#128179;</div>
         <div style={{ flex: 1, minWidth: 150 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5, color: "#f1f5f9", margin: 0 }}>Control de Creditos</h1>
-          <div style={{ fontSize: 10, color: "#334155" }}>Dashboard interactivo</div>
+          <div style={{ fontSize: 10, color: "#334155" }}>{isLoading ? "Sincronizando con PostgreSQL..." : "Dashboard interactivo con persistencia en base de datos"}</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={function () { setShowArchive(true); }} style={{ display: "flex", alignItems: "center", gap: 5, padding: "10px 14px", borderRadius: 12, background: "#1e293b", border: "1px solid #334155", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", position: "relative" }}>
@@ -650,6 +681,12 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {syncError && (
+        <div style={{ marginBottom: 18, padding: "12px 14px", borderRadius: 12, background: "#7f1d1d22", border: "1px solid #ef444433", color: "#fecaca", fontSize: 11 }}>
+          {syncError}
+        </div>
+      )}
 
       {/* KPIs */}
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>

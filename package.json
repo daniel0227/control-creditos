@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node --watch server.js",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "start": "vite preview"
+    "preview": "node server.js",
+    "start": "node server.js"
   },
   "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.20.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -1,16 +1,79 @@
-# React + Vite
+# Control de Creditos
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicacion full-stack para administrar creditos con React en el frontend y un backend Node/Express conectado a PostgreSQL.
 
-Currently, two official plugins are available:
+## Que pasaba antes
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+El proyecto original era solo un frontend Vite. Los creditos salian de un arreglo fijo dentro de [`src/App.jsx`](./src/App.jsx), por eso al recargar la pagina todo volvia a los datos demo.
 
-## React Compiler
+## Que cambio
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- El frontend ahora carga y guarda informacion por API.
+- Se agrego un servidor Express en [`server.js`](./server.js).
+- Los datos se guardan en PostgreSQL usando `DATABASE_URL`.
+- El servidor crea las tablas automaticamente al iniciar.
+- Los datos demo ahora son opcionales y solo se insertan si `SEED_DEMO_DATA=true`.
 
-## Expanding the ESLint configuration
+## Variables de entorno
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Usa `.env.example` como referencia:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/control_creditos
+PORT=3001
+SEED_DEMO_DATA=false
+```
+
+## Desarrollo local
+
+1. Instala dependencias:
+
+```bash
+npm install
+```
+
+2. Levanta el backend:
+
+```bash
+npm run dev:server
+```
+
+3. En otra terminal levanta el frontend:
+
+```bash
+npm run dev
+```
+
+Vite redirige `/api` al backend local en `http://127.0.0.1:3001`.
+
+## Railway
+
+1. Crea un servicio PostgreSQL dentro del mismo proyecto en Railway.
+2. Conecta la variable `DATABASE_URL` del servicio web al `DATABASE_URL` del servicio PostgreSQL.
+3. Usa estos comandos en el servicio web:
+
+```txt
+Build Command: npm run build
+Start Command: npm start
+```
+
+4. Despliega nuevamente.
+
+## Seed opcional
+
+Si quieres cargar una sola vez los datos demo actuales:
+
+1. Pon `SEED_DEMO_DATA=true`.
+2. Despliega.
+3. Verifica que los datos quedaron en la base.
+4. Vuelve a dejar `SEED_DEMO_DATA=false` para evitar siembras futuras.
+
+## API principal
+
+- `GET /api/dashboard`
+- `POST /api/credits`
+- `PUT /api/credits/:id`
+- `PUT /api/credits/:id/payments/:month`
+- `POST /api/credits/:id/archive`
+- `POST /api/credits/:id/restore`
+- `GET /api/health`
