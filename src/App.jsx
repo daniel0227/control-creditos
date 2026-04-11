@@ -34,7 +34,10 @@ function fDT(d) {
   return new Date(d).toLocaleString("es-CO", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 function cv(c) {
-  return c.originalValue - c.payments.reduce(function (s, p) { return s + (p.abono || 0); }, 0);
+  return Math.max(c.originalValue - c.payments.reduce(function (s, p) { return s + (p.abono || 0); }, 0), 0);
+}
+function calcInterest(capital, rate) {
+  return Math.round(Math.max(capital, 0) * (rate / 100));
 }
 
 var baseInput = {
@@ -248,8 +251,8 @@ function CreditFormModal(props) {
   var isEdit = !!credit;
 
   var init = isEdit
-    ? { entity: credit.entity, type: credit.type, responsible: credit.responsible, originalValue: String(credit.originalValue), rate: String(credit.rate), term: String(credit.term) }
-    : { entity: "", type: "Hipotecario", responsible: "", originalValue: "", rate: "", term: "" };
+    ? { entity: credit.entity, type: credit.type, responsible: credit.responsible, originalValue: String(credit.originalValue), rate: String(credit.rate) }
+    : { entity: "", type: "Hipotecario", responsible: "", originalValue: "", rate: "" };
 
   var fs = useState(init);
   var form = fs[0];
@@ -266,7 +269,6 @@ function CreditFormModal(props) {
     if (!form.responsible.trim()) e.responsible = true;
     if (!form.originalValue || Number(form.originalValue) <= 0) e.originalValue = true;
     if (!form.rate || Number(form.rate) <= 0 || Number(form.rate) > 100) e.rate = true;
-    if (!form.term || Number(form.term) <= 0) e.term = true;
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -274,9 +276,9 @@ function CreditFormModal(props) {
   function handle() {
     if (!validate()) return;
     if (isEdit) {
-      onSave(Object.assign({}, credit, { entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), term: Number(form.term) }));
+      onSave(Object.assign({}, credit, { entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate) }));
     } else {
-      onSave({ entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), term: Number(form.term), payments: [] });
+      onSave({ entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), payments: [] });
     }
     onClose();
   }
@@ -284,7 +286,7 @@ function CreditFormModal(props) {
   function eb(f) { return errors[f] ? "1px solid #ef4444" : "1px solid #334155"; }
   var ov = Number(form.originalValue) || 0;
   var or2 = Number(form.rate) || 0;
-  var intMes = Math.round(ov * (or2 / 100 / 12));
+  var estInt = calcInterest(ov, or2);
 
   return (
     <Overlay onClose={onClose}>
@@ -308,7 +310,7 @@ function CreditFormModal(props) {
           <input value={form.responsible} onChange={function (e) { upd("responsible", e.target.value); }} placeholder="Nombre completo" style={Object.assign({}, baseInput, { border: eb("responsible") })} />
           {errors.responsible && <span style={{ fontSize: 9, color: "#ef4444" }}>Requerido</span>}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
           <div>
             <span style={labelSt}>Valor ($) *</span>
             <input type="number" value={form.originalValue} onChange={function (e) { upd("originalValue", e.target.value); }} placeholder="50000000" style={Object.assign({}, monoInput, { border: eb("originalValue") })} />
@@ -316,15 +318,10 @@ function CreditFormModal(props) {
             {ov > 0 && <span style={{ fontSize: 9, color: "#3b82f6", display: "block", marginTop: 2 }}>{fmt(ov)}</span>}
           </div>
           <div>
-            <span style={labelSt}>Tasa Anual (%) *</span>
+            <span style={labelSt}>Interes (%) *</span>
             <input type="number" value={form.rate} onChange={function (e) { upd("rate", e.target.value); }} placeholder="12.5" step="0.1" style={Object.assign({}, monoInput, { border: eb("rate") })} />
             {errors.rate && <span style={{ fontSize: 9, color: "#ef4444" }}>Invalido</span>}
-            {or2 > 0 && ov > 0 && <span style={{ fontSize: 9, color: "#f59e0b", display: "block", marginTop: 2 }}>Int. mes: {fmt(intMes)}</span>}
-          </div>
-          <div>
-            <span style={labelSt}>Plazo (Meses) *</span>
-            <input type="number" value={form.term} onChange={function (e) { upd("term", e.target.value); }} placeholder="60" style={Object.assign({}, monoInput, { border: eb("term") })} />
-            {errors.term && <span style={{ fontSize: 9, color: "#ef4444" }}>Invalido</span>}
+            {or2 > 0 && ov > 0 && <span style={{ fontSize: 9, color: "#f59e0b", display: "block", marginTop: 2 }}>Interes estimado: {fmt(estInt)}</span>}
           </div>
         </div>
         {form.entity && ov > 0 && or2 > 0 && (
@@ -337,7 +334,7 @@ function CreditFormModal(props) {
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: "#3b82f6", fontFamily: "'JetBrains Mono', monospace" }}>{sh(ov)}</div>
-                <div style={{ fontSize: 10, color: "#f59e0b" }}>Int. mes: {fmt(intMes)}</div>
+                <div style={{ fontSize: 10, color: "#f59e0b" }}>Interes estimado: {fmt(estInt)}</div>
               </div>
             </div>
           </div>
@@ -361,7 +358,7 @@ function DetailModal(props) {
   var showForm = sfs[0];
   var setShowForm = sfs[1];
   var currentVal = cv(credit);
-  var defInt = Math.round(currentVal * (credit.rate / 100 / 12));
+  var defInt = calcInterest(currentVal, credit.rate);
   var fds = useState({ month: new Date().getMonth(), status: "P", date: new Date().toISOString().split("T")[0], interest: defInt, abono: 0, note: "" });
   var formData = fds[0];
   var setFormData = fds[1];
@@ -369,12 +366,20 @@ function DetailModal(props) {
   var totInt = credit.payments.filter(function (p) { return p.status !== "N"; }).reduce(function (s, p) { return s + p.interest; }, 0);
   var totAb = credit.payments.reduce(function (s, p) { return s + (p.abono || 0); }, 0);
   var pctR = credit.originalValue > 0 ? (totAb / credit.originalValue) * 100 : 0;
+  var projectedCapital = Math.max(currentVal - (Number(formData.abono) || 0), 0);
+  var projectedInterest = calcInterest(projectedCapital, credit.rate);
+
+  useEffect(function () {
+    setFormData(function (prev) {
+      return Object.assign({}, prev, { interest: defInt });
+    });
+  }, [defInt, credit.id, setFormData]);
 
   function uf(f, v) { setFormData(function (p) { return Object.assign({}, p, { [f]: v }); }); }
   function submit() {
     onAddPayment(credit.id, { month: formData.month, status: formData.status, date: formData.date, interest: Number(formData.interest), abono: Number(formData.abono), note: formData.note });
     setShowForm(false);
-    setFormData(function (p) { return Object.assign({}, p, { abono: 0, note: "" }); });
+    setFormData(function (p) { return Object.assign({}, p, { interest: defInt, abono: 0, note: "" }); });
   }
 
   return (
@@ -458,6 +463,16 @@ function DetailModal(props) {
                 <input type="number" value={formData.abono} onChange={function (e) { uf("abono", e.target.value); }} style={Object.assign({}, monoInput, { background: "#064e3b22", border: "1px solid #10b98133", color: "#10b981" })} />
               </div>
             </div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 10, padding: "10px 12px", borderRadius: 10, background: "#0b1220", border: "1px solid #1e293b" }}>
+              <div>
+                <div style={{ fontSize: 8, color: "#475569", textTransform: "uppercase", letterSpacing: 1 }}>Capital tras abono</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#93c5fd", fontFamily: "'JetBrains Mono', monospace" }}>{fmt(projectedCapital)}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 8, color: "#475569", textTransform: "uppercase", letterSpacing: 1 }}>Interes sugerido</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", fontFamily: "'JetBrains Mono', monospace" }}>{fmt(projectedInterest)}</div>
+              </div>
+            </div>
             <div style={{ marginBottom: 14 }}>
               <span style={labelSt}>Nota</span>
               <input value={formData.note} onChange={function (e) { uf("note", e.target.value); }} placeholder="Ej: Abono con prima..." style={baseInput} />
@@ -514,7 +529,7 @@ function DetailModal(props) {
             {[
               { l: "Total Intereses", v: fmt(totInt), c: "#f59e0b" },
               { l: "Total Abonos", v: fmt(totAb), c: "#10b981" },
-              { l: "Tasa Mensual", v: (credit.rate / 12).toFixed(2) + "%", c: "#94a3b8" },
+              { l: "Interes", v: credit.rate.toFixed(2) + "%", c: "#94a3b8" },
             ].map(function (x, i) {
               return (
                 <div key={i} style={{ textAlign: "center" }}>
@@ -643,7 +658,7 @@ export default function App() {
   var tOrig = enriched.reduce(function (s, c) { return s + c.originalValue; }, 0);
   var tCur = enriched.reduce(function (s, c) { return s + c.currentValue; }, 0);
   var tAb = enriched.reduce(function (s, c) { return s + c.payments.reduce(function (ss, p) { return ss + (p.abono || 0); }, 0); }, 0);
-  var tInt = enriched.reduce(function (s, c) { return s + Math.round(c.currentValue * (c.rate / 100 / 12)); }, 0);
+  var tInt = enriched.reduce(function (s, c) { return s + calcInterest(c.currentValue, c.rate); }, 0);
   var aP = enriched.flatMap(function (c) { return c.payments; });
   var pd = aP.filter(function (p) { return p.status === "P"; }).length;
   var up = aP.filter(function (p) { return p.status === "N"; }).length;
@@ -692,7 +707,7 @@ export default function App() {
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         {[
           { l: "Deuda Actual", v: sh(tCur), s: "Original: " + sh(tOrig), c: "#3b82f6" },
-          { l: "Interes Mensual", v: sh(tInt), s: "Total estimado", c: "#f59e0b" },
+          { l: "Interes Actual", v: sh(tInt), s: "Sobre capital vigente", c: "#f59e0b" },
           { l: "Abonos Capital", v: sh(tAb), s: tOrig > 0 ? ((tAb / tOrig) * 100).toFixed(1) + "% reducido" : "0%", c: "#10b981" },
           { l: "Cumplimiento", v: cPct + "%", s: pd + "/" + tP + " pagos", c: cPct > 80 ? "#10b981" : "#f59e0b" },
         ].map(function (k, i) {
@@ -748,7 +763,7 @@ export default function App() {
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 950 }}>
             <thead>
               <tr>
-                {["", "Entidad", "Tipo", "Responsable", "Capital", "Tasa", "Int. Mes", "Acciones", "Semaforo 2026"].map(function (h, i) {
+                {["", "Entidad", "Tipo", "Responsable", "Capital", "Interes", "Interes Calc.", "Acciones", "Semaforo 2026"].map(function (h, i) {
                   return <th key={i} style={{ padding: "10px 10px", fontSize: 8, color: "#334155", textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, textAlign: i === 8 ? "center" : "left", borderBottom: "1px solid #1e293b" }}>{h}</th>;
                 })}
               </tr>
@@ -758,7 +773,7 @@ export default function App() {
                 <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#334155", fontSize: 13 }}>No hay creditos registrados</td></tr>
               )}
               {enriched.map(function (c, idx) {
-                var mi = Math.round(c.currentValue * (c.rate / 100 / 12));
+                var mi = calcInterest(c.currentValue, c.rate);
                 var pm = {};
                 c.payments.forEach(function (p) { pm[p.month] = p; });
                 return (

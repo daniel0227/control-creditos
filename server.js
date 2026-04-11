@@ -63,7 +63,6 @@ function normalizeCreditPayload(payload) {
   const responsible = typeof payload.responsible === "string" ? payload.responsible.trim() : "";
   const originalValue = Number(payload.originalValue);
   const rate = Number(payload.rate);
-  const term = Number(payload.term);
 
   if (!entity) {
     throw new HttpError(400, "La entidad es obligatoria.");
@@ -82,11 +81,7 @@ function normalizeCreditPayload(payload) {
   }
 
   if (!Number.isFinite(rate) || rate <= 0 || rate > 100) {
-    throw new HttpError(400, "La tasa anual debe estar entre 0 y 100.");
-  }
-
-  if (!Number.isInteger(term) || term <= 0) {
-    throw new HttpError(400, "El plazo debe ser un numero entero positivo.");
+    throw new HttpError(400, "El porcentaje de interes debe estar entre 0 y 100.");
   }
 
   return {
@@ -95,7 +90,6 @@ function normalizeCreditPayload(payload) {
     responsible,
     originalValue: Math.round(originalValue),
     rate,
-    term,
   };
 }
 
@@ -160,7 +154,6 @@ function mapCreditRows(rows) {
         responsible: row.responsible,
         originalValue: Number(row.original_value),
         rate: Number(row.rate),
-        term: row.term,
         archivedAt: row.archived_at,
         archiveReason: row.archive_reason,
         payments: [],
@@ -191,7 +184,6 @@ function toArchiveItem(credit) {
       responsible: credit.responsible,
       originalValue: credit.originalValue,
       rate: credit.rate,
-      term: credit.term,
       payments: credit.payments,
     },
     reason: credit.archiveReason || "",
@@ -212,12 +204,23 @@ async function initializeDatabase() {
       responsible TEXT NOT NULL,
       original_value BIGINT NOT NULL CHECK (original_value > 0),
       rate NUMERIC(8, 2) NOT NULL CHECK (rate > 0 AND rate <= 100),
-      term INTEGER NOT NULL CHECK (term > 0),
+      term INTEGER NOT NULL DEFAULT 1 CHECK (term > 0),
       archived_at TIMESTAMPTZ,
       archive_reason TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE credits
+    ALTER COLUMN term SET DEFAULT 1;
+  `);
+
+  await pool.query(`
+    UPDATE credits
+    SET term = 1
+    WHERE term IS DISTINCT FROM 1;
   `);
 
   await pool.query(`
@@ -264,7 +267,7 @@ async function seedDemoData() {
           VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING id;
         `,
-        [credit.entity, credit.type, credit.responsible, credit.originalValue, credit.rate, credit.term]
+        [credit.entity, credit.type, credit.responsible, credit.originalValue, credit.rate, 1]
       );
 
       for (const payment of credit.payments) {
@@ -307,7 +310,6 @@ async function fetchCredits(options) {
         c.responsible,
         c.original_value,
         c.rate,
-        c.term,
         c.archived_at,
         c.archive_reason,
         p.id AS payment_id,
@@ -339,7 +341,6 @@ async function fetchCreditById(id) {
         c.responsible,
         c.original_value,
         c.rate,
-        c.term,
         c.archived_at,
         c.archive_reason,
         p.id AS payment_id,
@@ -383,7 +384,6 @@ function sanitizeCredit(credit) {
     responsible: credit.responsible,
     originalValue: credit.originalValue,
     rate: credit.rate,
-    term: credit.term,
     payments: credit.payments,
   };
 }
@@ -423,7 +423,7 @@ app.post("/api/credits", requireDatabase, async function (req, res) {
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id;
       `,
-      [payload.entity, payload.type, payload.responsible, payload.originalValue, payload.rate, payload.term]
+      [payload.entity, payload.type, payload.responsible, payload.originalValue, payload.rate, 1]
     );
 
     const credit = await fetchCreditById(result.rows[0].id);
@@ -454,7 +454,7 @@ app.put("/api/credits/:id", requireDatabase, async function (req, res) {
           updated_at = NOW()
         WHERE id = $1;
       `,
-      [id, payload.entity, payload.type, payload.responsible, payload.originalValue, payload.rate, payload.term]
+      [id, payload.entity, payload.type, payload.responsible, payload.originalValue, payload.rate, 1]
     );
 
     const credit = await fetchCreditById(id);
