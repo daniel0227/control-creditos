@@ -739,7 +739,7 @@ export default function App() {
           <div style={{ fontSize: 10, color: "#334155" }}>{isLoading ? "Sincronizando con PostgreSQL..." : "Dashboard interactivo con persistencia en base de datos"}</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {responsables.length > 1 && (
+          {responsables.length >= 1 && (
             <select
               value={filterResponsable}
               onChange={function (e) { setFilterResponsable(e.target.value); }}
