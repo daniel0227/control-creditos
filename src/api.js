@@ -58,3 +58,9 @@ export function upsertPayment(creditId, payment) {
     body: JSON.stringify(payment),
   });
 }
+
+export function deletePayment(creditId, month) {
+  return request("/api/credits/" + creditId + "/payments/" + month, {
+    method: "DELETE",
+  });
+}

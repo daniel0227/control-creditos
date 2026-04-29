@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   archiveCredit,
   createCredit,
+  deletePayment as deletePaymentRequest,
   fetchDashboard,
   restoreCredit as restoreCreditRequest,
   updateCredit as updateCreditRequest,
@@ -354,9 +355,13 @@ function DetailModal(props) {
   var credit = props.credit;
   var onClose = props.onClose;
   var onAddPayment = props.onAddPayment;
+  var onDeletePayment = props.onDeletePayment;
   var sfs = useState(false);
   var showForm = sfs[0];
   var setShowForm = sfs[1];
+  var cds = useState(null);
+  var confirmDeleteMonth = cds[0];
+  var setConfirmDeleteMonth = cds[1];
   var currentVal = cv(credit);
   var defInt = calcInterest(currentVal, credit.rate);
   var fds = useState({ month: new Date().getMonth(), status: "P", date: new Date().toISOString().split("T")[0], interest: defInt, abono: 0, note: "" });
@@ -492,6 +497,7 @@ function DetailModal(props) {
           {credit.payments.length > 0 && <div style={{ position: "absolute", left: 16, top: 0, bottom: 0, width: 2, background: "linear-gradient(180deg, #3b82f633, transparent)" }} />}
           {[...credit.payments].reverse().map(function (p, i) {
             var cfg = ST[p.status] || ST.P;
+            var isConfirming = confirmDeleteMonth === p.month;
             return (
               <div key={i} style={{ display: "flex", gap: 14, marginBottom: 14, position: "relative" }}>
                 <div style={{ width: 34, height: 34, borderRadius: 9, background: cfg.bg, border: "2px solid " + cfg.color + "44", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, zIndex: 1 }}>
@@ -503,8 +509,24 @@ function DetailModal(props) {
                       <span style={{ fontSize: 12, fontWeight: 700, color: cfg.color }}>{MONTHS[p.month]} 2026</span>
                       <span style={{ fontSize: 9, color: "#334155" }}>{fD(p.date)}</span>
                     </div>
-                    <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 5, background: cfg.bg, color: cfg.color, fontWeight: 700 }}>{cfg.label}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 5, background: cfg.bg, color: cfg.color, fontWeight: 700 }}>{cfg.label}</span>
+                      {!isConfirming && (
+                        <button
+                          onClick={function () { setConfirmDeleteMonth(p.month); }}
+                          title="Eliminar pago"
+                          style={{ width: 22, height: 22, borderRadius: 5, background: "#7f1d1d22", border: "1px solid #ef444433", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#ef4444", fontSize: 10, flexShrink: 0 }}
+                        >&#128465;</button>
+                      )}
+                    </div>
                   </div>
+                  {isConfirming && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "8px 10px", borderRadius: 8, background: "#7f1d1d22", border: "1px solid #ef444433" }}>
+                      <span style={{ fontSize: 10, color: "#fca5a5", flex: 1 }}>&#9888; Eliminar este pago?</span>
+                      <button onClick={function () { setConfirmDeleteMonth(null); }} style={{ padding: "3px 10px", borderRadius: 6, background: "#1e293b", border: "1px solid #334155", color: "#94a3b8", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
+                      <button onClick={function () { setConfirmDeleteMonth(null); onDeletePayment(credit.id, p.month); }} style={{ padding: "3px 10px", borderRadius: 6, background: "#ef4444", border: "none", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Eliminar</button>
+                    </div>
+                  )}
                   <div style={{ display: "flex", gap: 18 }}>
                     <div>
                       <div style={{ fontSize: 8, color: "#334155", textTransform: "uppercase", letterSpacing: 1 }}>Intereses</div>
@@ -600,6 +622,21 @@ export default function App() {
       })
       .catch(function (error) {
         setSyncError(error.message || "No se pudo registrar el pago.");
+      });
+  }
+
+  function removePayment(cid, month) {
+    setSyncError("");
+    return deletePaymentRequest(cid, month)
+      .then(function (updated) {
+        setCredits(function (prev) {
+          return prev.map(function (c) {
+            return c.id === updated.id ? updated : c;
+          });
+        });
+      })
+      .catch(function (error) {
+        setSyncError(error.message || "No se pudo eliminar el pago.");
       });
   }
 
@@ -812,7 +849,7 @@ export default function App() {
         Ver detalle | Editar | Eliminar | Valores en COP
       </div>
 
-      {detailCredit && <DetailModal credit={detailCredit} onClose={function () { setDetailId(null); }} onAddPayment={addPayment} />}
+      {detailCredit && <DetailModal credit={detailCredit} onClose={function () { setDetailId(null); }} onAddPayment={addPayment} onDeletePayment={removePayment} />}
       {formModal && <CreditFormModal credit={formModal === "new" ? null : formModal} onClose={function () { setFormModal(null); }} onSave={saveCredit} />}
       {deleteTarget && <DeleteModal credit={deleteTarget} onClose={function () { setDeleteTarget(null); }} onConfirm={deleteCredit} />}
       {showArchive && <ArchiveModal archived={archived} onClose={function () { setShowArchive(false); }} onRestore={restoreCredit} />}

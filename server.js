@@ -500,6 +500,34 @@ app.put("/api/credits/:id/payments/:month", requireDatabase, async function (req
   }
 });
 
+app.delete("/api/credits/:id/payments/:month", requireDatabase, async function (req, res) {
+  try {
+    const id = parsePositiveInteger(req.params.id, "id");
+    await ensureActiveCredit(id);
+    const month = Number(req.params.month);
+
+    if (!Number.isInteger(month) || month < 0 || month > 11) {
+      throw new HttpError(400, "El mes del pago es invalido.");
+    }
+
+    const result = await pool.query(
+      `DELETE FROM payments WHERE credit_id = $1 AND month = $2 RETURNING id;`,
+      [id, month]
+    );
+
+    if (result.rowCount === 0) {
+      throw new HttpError(404, "Pago no encontrado.");
+    }
+
+    const credit = await fetchCreditById(id);
+    res.json(sanitizeCredit(credit));
+  } catch (error) {
+    const status = error.status || 500;
+    console.error(error);
+    res.status(status).json({ error: status === 500 ? "No fue posible eliminar el pago." : error.message });
+  }
+});
+
 app.post("/api/credits/:id/archive", requireDatabase, async function (req, res) {
   try {
     const id = parsePositiveInteger(req.params.id, "id");
