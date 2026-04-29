@@ -84,12 +84,15 @@ function normalizeCreditPayload(payload) {
     throw new HttpError(400, "El porcentaje de interes debe estar entre 0 y 100.");
   }
 
+  const observation = typeof payload.observation === "string" ? payload.observation.trim() : "";
+
   return {
     entity,
     type,
     responsible,
     originalValue: Math.round(originalValue),
     rate,
+    observation,
   };
 }
 
@@ -154,6 +157,7 @@ function mapCreditRows(rows) {
         responsible: row.responsible,
         originalValue: Number(row.original_value),
         rate: Number(row.rate),
+        observation: row.observation || "",
         archivedAt: row.archived_at,
         archiveReason: row.archive_reason,
         payments: [],
@@ -242,6 +246,10 @@ async function initializeDatabase() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_payments_credit_id
     ON payments (credit_id);
+  `);
+
+  await pool.query(`
+    ALTER TABLE credits ADD COLUMN IF NOT EXISTS observation TEXT NOT NULL DEFAULT '';
   `);
 }
 
@@ -384,6 +392,7 @@ function sanitizeCredit(credit) {
     responsible: credit.responsible,
     originalValue: credit.originalValue,
     rate: credit.rate,
+    observation: credit.observation || "",
     payments: credit.payments,
   };
 }
@@ -419,11 +428,11 @@ app.post("/api/credits", requireDatabase, async function (req, res) {
     const payload = normalizeCreditPayload(req.body);
     const result = await pool.query(
       `
-        INSERT INTO credits (entity, type, responsible, original_value, rate, term)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO credits (entity, type, responsible, original_value, rate, term, observation)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id;
       `,
-      [payload.entity, payload.type, payload.responsible, payload.originalValue, payload.rate, 1]
+      [payload.entity, payload.type, payload.responsible, payload.originalValue, payload.rate, 1, payload.observation]
     );
 
     const credit = await fetchCreditById(result.rows[0].id);
@@ -451,10 +460,11 @@ app.put("/api/credits/:id", requireDatabase, async function (req, res) {
           original_value = $5,
           rate = $6,
           term = $7,
+          observation = $8,
           updated_at = NOW()
         WHERE id = $1;
       `,
-      [id, payload.entity, payload.type, payload.responsible, payload.originalValue, payload.rate, 1]
+      [id, payload.entity, payload.type, payload.responsible, payload.originalValue, payload.rate, 1, payload.observation]
     );
 
     const credit = await fetchCreditById(id);

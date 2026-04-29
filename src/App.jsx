@@ -118,22 +118,17 @@ function Sem(props) {
 }
 
 function Donut(props) {
-  var pa = props.p;
-  var up = props.u;
-  var pp = props.pp;
-  var t = pa + up + pp || 1;
+  var abonado = props.abonado || 0;
+  var total = props.total || 1;
+  var pct = total > 0 ? Math.min(abonado / total, 1) : 0;
   var r = 46, cx = 56, cy = 56, sw = 11, ci = 2 * Math.PI * r;
-  var a1 = (pa / t) * ci;
-  var a2 = (pp / t) * ci;
-  var a3 = (up / t) * ci;
+  var a1 = pct * ci;
   return (
     <svg width={112} height={112} viewBox="0 0 112 112">
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth={sw} />
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#10b981" strokeWidth={sw} strokeDasharray={a1 + " " + (ci - a1)} strokeDashoffset={ci * 0.25} strokeLinecap="round" />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f59e0b" strokeWidth={sw} strokeDasharray={a2 + " " + (ci - a2)} strokeDashoffset={ci * 0.25 - a1} strokeLinecap="round" />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#ef4444" strokeWidth={sw} strokeDasharray={a3 + " " + (ci - a3)} strokeDashoffset={ci * 0.25 - a1 - a2} strokeLinecap="round" />
-      <text x={cx} y={cy - 3} textAnchor="middle" fill="#f1f5f9" fontSize={18} fontWeight={800}>{Math.round((pa / t) * 100)}%</text>
-      <text x={cx} y={cy + 12} textAnchor="middle" fill="#475569" fontSize={8}>al dia</text>
+      <text x={cx} y={cy - 3} textAnchor="middle" fill="#f1f5f9" fontSize={18} fontWeight={800}>{Math.round(pct * 100)}%</text>
+      <text x={cx} y={cy + 12} textAnchor="middle" fill="#475569" fontSize={8}>abonado</text>
     </svg>
   );
 }
@@ -252,8 +247,8 @@ function CreditFormModal(props) {
   var isEdit = !!credit;
 
   var init = isEdit
-    ? { entity: credit.entity, type: credit.type, responsible: credit.responsible, originalValue: String(credit.originalValue), rate: String(credit.rate) }
-    : { entity: "", type: "Hipotecario", responsible: "", originalValue: "", rate: "" };
+    ? { entity: credit.entity, type: credit.type, responsible: credit.responsible, originalValue: String(credit.originalValue), rate: String(credit.rate), observation: credit.observation || "" }
+    : { entity: "", type: "Hipotecario", responsible: "", originalValue: "", rate: "", observation: "" };
 
   var fs = useState(init);
   var form = fs[0];
@@ -277,9 +272,9 @@ function CreditFormModal(props) {
   function handle() {
     if (!validate()) return;
     if (isEdit) {
-      onSave(Object.assign({}, credit, { entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate) }));
+      onSave(Object.assign({}, credit, { entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), observation: form.observation.trim() }));
     } else {
-      onSave({ entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), payments: [] });
+      onSave({ entity: form.entity.trim(), type: form.type, responsible: form.responsible.trim(), originalValue: Number(form.originalValue), rate: Number(form.rate), observation: form.observation.trim(), payments: [] });
     }
     onClose();
   }
@@ -325,6 +320,17 @@ function CreditFormModal(props) {
             {or2 > 0 && ov > 0 && <span style={{ fontSize: 9, color: "#f59e0b", display: "block", marginTop: 2 }}>Interes estimado: {fmt(estInt)}</span>}
           </div>
         </div>
+        <div style={{ marginBottom: 14 }}>
+          <span style={labelSt}>Observación</span>
+          <textarea
+            value={form.observation}
+            onChange={function (e) { upd("observation", e.target.value); }}
+            placeholder="Notas importantes del crédito: condiciones especiales, acuerdos, recordatorios..."
+            rows={3}
+            style={Object.assign({}, baseInput, { resize: "vertical", minHeight: 70 })}
+          />
+        </div>
+
         {form.entity && ov > 0 && or2 > 0 && (
           <div style={{ padding: "14px 16px", background: "#060a14", borderRadius: 12, border: "1px solid #1e293b", marginBottom: 18 }}>
             <div style={{ fontSize: 9, color: "#475569", textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>Vista previa</div>
@@ -425,6 +431,13 @@ function DetailModal(props) {
           <div style={{ height: 7, borderRadius: 4, background: "#1e293b", overflow: "hidden" }}>
             <div style={{ height: "100%", width: pctR + "%", borderRadius: 4, background: "linear-gradient(90deg, #10b981, #34d399)" }} />
           </div>
+        </div>
+      )}
+
+      {credit.observation && (
+        <div style={{ padding: "12px 24px", borderBottom: "1px solid #1e293b22", background: "#060a1488" }}>
+          <div style={{ fontSize: 9, color: "#475569", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>Observación</div>
+          <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>{credit.observation}</div>
         </div>
       )}
 
@@ -592,6 +605,9 @@ export default function App() {
   var ers = useState("");
   var syncError = ers[0];
   var setSyncError = ers[1];
+  var frs = useState("");
+  var filterResponsable = frs[0];
+  var setFilterResponsable = frs[1];
 
   useEffect(function () {
     setLoading(true);
@@ -692,16 +708,15 @@ export default function App() {
   }
 
   var enriched = credits.map(function (c) { return Object.assign({}, c, { currentValue: cv(c) }); });
-  var tOrig = enriched.reduce(function (s, c) { return s + c.originalValue; }, 0);
-  var tCur = enriched.reduce(function (s, c) { return s + c.currentValue; }, 0);
-  var tAb = enriched.reduce(function (s, c) { return s + c.payments.reduce(function (ss, p) { return ss + (p.abono || 0); }, 0); }, 0);
-  var tInt = enriched.reduce(function (s, c) { return s + calcInterest(c.currentValue, c.rate); }, 0);
-  var aP = enriched.flatMap(function (c) { return c.payments; });
-  var pd = aP.filter(function (p) { return p.status === "P"; }).length;
-  var up = aP.filter(function (p) { return p.status === "N"; }).length;
-  var pp = aP.filter(function (p) { return p.status === "PP"; }).length;
-  var tP = pd + up + pp;
-  var cPct = tP > 0 ? Math.round((pd / tP) * 100) : 0;
+  var responsables = Array.from(new Set(enriched.map(function (c) { return c.responsible; }))).sort();
+  var filteredEnriched = filterResponsable
+    ? enriched.filter(function (c) { return c.responsible === filterResponsable; })
+    : enriched;
+  var tOrig = filteredEnriched.reduce(function (s, c) { return s + c.originalValue; }, 0);
+  var tCur = filteredEnriched.reduce(function (s, c) { return s + c.currentValue; }, 0);
+  var tAb = filteredEnriched.reduce(function (s, c) { return s + c.payments.reduce(function (ss, p) { return ss + (p.abono || 0); }, 0); }, 0);
+  var tInt = filteredEnriched.reduce(function (s, c) { return s + calcInterest(c.currentValue, c.rate); }, 0);
+  var cPct = tOrig > 0 ? Math.round((tAb / tOrig) * 100) : 0;
   var detailCredit = detailId ? enriched.find(function (c) { return c.id === detailId; }) : null;
 
   return (
@@ -723,7 +738,17 @@ export default function App() {
           <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5, color: "#f1f5f9", margin: 0 }}>Control de Creditos</h1>
           <div style={{ fontSize: 10, color: "#334155" }}>{isLoading ? "Sincronizando con PostgreSQL..." : "Dashboard interactivo con persistencia en base de datos"}</div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {responsables.length > 1 && (
+            <select
+              value={filterResponsable}
+              onChange={function (e) { setFilterResponsable(e.target.value); }}
+              style={{ padding: "10px 14px", borderRadius: 12, background: filterResponsable ? "#0c2a1e" : "#1e293b", border: filterResponsable ? "1px solid #10b98155" : "1px solid #334155", color: filterResponsable ? "#10b981" : "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              <option value="">Todos los responsables</option>
+              {responsables.map(function (r) { return <option key={r} value={r}>{r}</option>; })}
+            </select>
+          )}
           <button onClick={function () { setShowArchive(true); }} style={{ display: "flex", alignItems: "center", gap: 5, padding: "10px 14px", borderRadius: 12, background: "#1e293b", border: "1px solid #334155", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", position: "relative" }}>
             Eliminados
             {archived.length > 0 && <span style={{ position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{archived.length}</span>}
@@ -746,7 +771,7 @@ export default function App() {
           { l: "Deuda Actual", v: sh(tCur), s: "Original: " + sh(tOrig), c: "#3b82f6" },
           { l: "Interes Actual", v: sh(tInt), s: "Sobre capital vigente", c: "#f59e0b" },
           { l: "Abonos Capital", v: sh(tAb), s: tOrig > 0 ? ((tAb / tOrig) * 100).toFixed(1) + "% reducido" : "0%", c: "#10b981" },
-          { l: "Cumplimiento", v: cPct + "%", s: pd + "/" + tP + " pagos", c: cPct > 80 ? "#10b981" : "#f59e0b" },
+          { l: "Cumplimiento", v: cPct + "%", s: sh(tAb) + " de " + sh(tOrig) + " abonado", c: cPct > 80 ? "#10b981" : "#f59e0b" },
         ].map(function (k, i) {
           return (
             <div key={i} style={{ flex: "1 1 170px", minWidth: 155, background: "linear-gradient(145deg, #0a0f1a, #131c2e)", borderRadius: 14, padding: "20px 16px", position: "relative", overflow: "hidden", border: "1px solid " + k.c + "12" }}>
@@ -762,15 +787,15 @@ export default function App() {
       {/* Donut + Cards */}
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         <div style={{ flex: "0 0 150px", background: "linear-gradient(145deg, #0a0f1a, #131c2e)", borderRadius: 14, padding: 14, border: "1px solid #1e293b", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <Donut p={pd} u={up} pp={pp} />
+          <Donut abonado={tAb} total={tOrig} />
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            {[{ l: "P", c: "#10b981", v: pd }, { l: "N", c: "#ef4444", v: up }, { l: "PP", c: "#f59e0b", v: pp }].map(function (x) {
+            {[{ l: "Abonado", c: "#10b981", v: sh(tAb) }, { l: "Restante", c: "#334155", v: sh(tCur) }].map(function (x) {
               return <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: x.c }} /><span style={{ fontSize: 8, color: "#475569" }}>{x.v}</span></div>;
             })}
           </div>
         </div>
         <div style={{ flex: 1, display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-          {enriched.map(function (c) {
+          {filteredEnriched.map(function (c) {
             var ab = c.payments.reduce(function (s, p) { return s + (p.abono || 0); }, 0);
             var pct = c.originalValue > 0 ? (ab / c.originalValue) * 100 : 0;
             return (
@@ -782,7 +807,7 @@ export default function App() {
               </div>
             );
           })}
-          {enriched.length === 0 && <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#334155", fontSize: 12 }}>Sin creditos - crea uno</div>}
+          {filteredEnriched.length === 0 && <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#334155", fontSize: 12 }}>{filterResponsable ? "Sin créditos para este responsable" : "Sin créditos - crea uno"}</div>}
         </div>
       </div>
 
@@ -806,10 +831,10 @@ export default function App() {
               </tr>
             </thead>
             <tbody>
-              {enriched.length === 0 && (
-                <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#334155", fontSize: 13 }}>No hay creditos registrados</td></tr>
+              {filteredEnriched.length === 0 && (
+                <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#334155", fontSize: 13 }}>{filterResponsable ? "Sin créditos para " + filterResponsable : "No hay créditos registrados"}</td></tr>
               )}
-              {enriched.map(function (c, idx) {
+              {filteredEnriched.map(function (c, idx) {
                 var mi = calcInterest(c.currentValue, c.rate);
                 var pm = {};
                 c.payments.forEach(function (p) { pm[p.month] = p; });
